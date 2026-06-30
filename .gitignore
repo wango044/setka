@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.sqlite3
+*.egg-info/
+sessions/
+.pytest_cache/
+*.log
+drafts_review.md
+creatives/

@@ -1,0 +1,30 @@
+services:
+  - type: worker
+    name: setka-tg-grid-agent
+    runtime: docker
+    plan: starter
+    disk:
+      name: setka-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: TELEGRAM_PUBLISH_MODE
+        value: bot
+      - key: TELEGRAM_SESSION_NAME
+        value: owner
+      - key: TG_GRID_TIMEZONE
+        value: Europe/Moscow
+      - key: TG_GRID_DB_PATH
+        value: /data/tg_grid.sqlite3
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1
+      - key: TGPOSTAI_MODEL
+        value: gemini-2.5-flash
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

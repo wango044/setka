@@ -1,0 +1,31 @@
+brand:
+  name: "My Media Grid"
+  voice: "Direct, useful, energetic, no clickbait."
+  banned_topics:
+    - "unverified medical claims"
+    - "financial promises"
+
+channels:
+  - key: "main"
+    peer: "@your_channel_username"
+    audience: "Warm audience that wants practical business and creator ideas."
+    content_pillars:
+      - "short tactical posts"
+      - "behind-the-scenes"
+      - "case studies"
+      - "offers and lead magnets"
+    default_cta: "Reply with '+' if you want the checklist."
+
+calendar:
+  posts_per_channel: 10
+  timezone: "Europe/Moscow"
+  slots:
+    - "10:30"
+    - "14:00"
+    - "19:30"
+
+generation:
+  approve_before_scheduling: true
+  improve_before_approval: true
+  include_creative_prompt: true
+  max_post_chars: 1200
