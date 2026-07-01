@@ -54,7 +54,10 @@ class AdminBot:
             for update in updates:
                 offset = update["update_id"] + 1
                 self._set_offset(offset)
-                self.handle_update(update)
+                try:
+                    self.handle_update(update)
+                except Exception as exc:
+                    self._notify_update_error(update, exc)
             if once:
                 return
             time.sleep(1)
@@ -154,17 +157,23 @@ class AdminBot:
             return
         if data.startswith("approve:"):
             item_id = int(data.split(":", 1)[1])
-            self.bot.send_message(chat_id, "Улучшаю пост через TgPostAI перед одобрением...")
-            self.improver.improve_item(self.store, self._get_item(item_id))
-            self.store.approve([item_id])
-            item = self._get_item(item_id)
-            self._send_item(chat_id, item, message_id)
+            try:
+                self.bot.send_message(chat_id, "Улучшаю пост через TgPostAI перед одобрением...")
+                self.improver.improve_item(self.store, self._get_item(item_id))
+                self.store.approve([item_id])
+                item = self._get_item(item_id)
+                self._send_item(chat_id, item, message_id)
+            except Exception as exc:
+                self.bot.send_message(chat_id, f"Не смог одобрить пост [{item_id}]: {exc}")
             return
         if data.startswith("improve:"):
             item_id = int(data.split(":", 1)[1])
-            self.bot.send_message(chat_id, "Улучшаю пост через TgPostAI...")
-            item = self.improver.improve_item(self.store, self._get_item(item_id))
-            self._send_item(chat_id, item, message_id)
+            try:
+                self.bot.send_message(chat_id, "Улучшаю пост через TgPostAI...")
+                item = self.improver.improve_item(self.store, self._get_item(item_id), force=True)
+                self._send_item(chat_id, item, message_id)
+            except Exception as exc:
+                self.bot.send_message(chat_id, f"Не смог улучшить пост [{item_id}]: {exc}")
             return
 
     def _send_home(self, chat_id: int) -> None:
@@ -230,9 +239,21 @@ class AdminBot:
         keyboard: dict | None,
     ) -> None:
         if message_id:
-            self.bot.edit_message_text(chat_id, message_id, text[:4000], keyboard)
+            try:
+                self.bot.edit_message_text(chat_id, message_id, text[:4000], keyboard)
+            except Exception:
+                self.bot.send_message(chat_id, text[:4000], keyboard)
         else:
             self.bot.send_message(chat_id, text[:4000], keyboard)
+
+    def _notify_update_error(self, update: dict, exc: Exception) -> None:
+        message = update.get("message") or update.get("callback_query", {}).get("message") or {}
+        chat_id = message.get("chat", {}).get("id")
+        if chat_id:
+            try:
+                self.bot.send_message(chat_id, f"Ошибка в админке: {exc}")
+            except Exception:
+                pass
 
     def _home_text(self) -> str:
         draft_count = len(self.store.list_items(status="draft", limit=1000))

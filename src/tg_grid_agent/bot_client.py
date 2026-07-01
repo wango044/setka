@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 import urllib.request
+import urllib.error
 from typing import Any
 
 
@@ -78,8 +79,17 @@ class TelegramBotClient:
             data=data,
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=30) as response:
-            body = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(detail)
+                detail = payload.get("description", detail)
+            except json.JSONDecodeError:
+                pass
+            raise RuntimeError(f"Telegram API error {exc.code}: {detail}") from exc
 
         if not body.get("ok"):
             raise RuntimeError(body.get("description", "Telegram Bot API error"))

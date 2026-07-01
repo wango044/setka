@@ -20,12 +20,17 @@ class TgPostAIImprover:
         generation = self.config.get("generation", {})
         return bool(generation.get("improve_before_approval", True))
 
-    def improve_item(self, store: ContentStore, item: ContentItem) -> ContentItem:
+    def improve_item(
+        self,
+        store: ContentStore,
+        item: ContentItem,
+        force: bool = False,
+    ) -> ContentItem:
         if not self.enabled():
             return item
 
         metadata = dict(item.metadata)
-        if metadata.get("tgpostai_improved"):
+        if metadata.get("tgpostai_improved") and not force:
             return item
 
         try:
@@ -35,6 +40,7 @@ class TgPostAIImprover:
                 metadata.setdefault("original_body", item.body)
                 metadata["tgpostai_improved"] = True
                 metadata["tgpostai_model"] = self.settings.tgpostai_model
+                metadata["tgpostai_force"] = force
                 store.update_body_and_metadata(item.id, improved_body.strip(), metadata)
             else:
                 metadata["tgpostai_improved"] = False

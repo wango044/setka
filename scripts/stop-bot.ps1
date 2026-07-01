@@ -8,6 +8,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 $processes = Get-CimInstance Win32_Process |
     Where-Object {
+        $_.ProcessId -ne $PID -and
         ($_.Name -eq "tg-grid.exe" -or $_.Name -eq "python.exe" -or $_.Name -eq "powershell.exe") -and
         ($_.CommandLine -like "*tg-grid*run-all*" -or
          $_.CommandLine -like "*tg_grid_agent.cli*run-all*" -or
