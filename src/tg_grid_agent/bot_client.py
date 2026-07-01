@@ -23,6 +23,7 @@ class TelegramBotClient:
             "chat_id": chat_id,
             "text": text,
             "disable_web_page_preview": True,
+            "parse_mode": "HTML",
         }
         if reply_markup:
             payload["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
@@ -41,6 +42,7 @@ class TelegramBotClient:
             "message_id": message_id,
             "text": text,
             "disable_web_page_preview": True,
+            "parse_mode": "HTML",
         }
         if reply_markup:
             payload["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)

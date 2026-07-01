@@ -21,8 +21,11 @@ class RuntimeSettings:
     bot_admin_user_ids: tuple[int, ...]
     telegram_session_name: str
     openai_api_key: str | None
+    openai_base_url: str | None
     openai_model: str
     openai_image_model: str
+    ollama_base_url: str
+    ollama_model: str | None
     gemini_api_key: str | None
     tgpostai_model: str
     timezone: str
@@ -60,8 +63,11 @@ def load_settings(require_telegram: bool = True) -> RuntimeSettings:
         ),
         telegram_session_name=os.getenv("TELEGRAM_SESSION_NAME", "owner"),
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
+        openai_base_url=os.getenv("OPENAI_BASE_URL") or None,
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
         openai_image_model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/"),
+        ollama_model=os.getenv("OLLAMA_MODEL") or None,
         gemini_api_key=os.getenv("GEMINI_API_KEY") or None,
         tgpostai_model=os.getenv("TGPOSTAI_MODEL", "gemini-2.5-flash"),
         timezone=os.getenv("TG_GRID_TIMEZONE", "Europe/Moscow"),

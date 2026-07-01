@@ -308,9 +308,14 @@ class AdminBot:
 
     def _generate_two_days(self) -> int:
         agent = ContentAgent(
-            self.settings.openai_api_key,
-            self.settings.openai_model,
-            self.settings.openai_image_model,
+            api_key=self.settings.openai_api_key,
+            model=self.settings.openai_model,
+            image_model=self.settings.openai_image_model,
+            base_url=self.settings.openai_base_url,
+            ollama_base_url=self.settings.ollama_base_url,
+            ollama_model=self.settings.ollama_model,
+            gemini_api_key=self.settings.gemini_api_key,
+            gemini_model=self.settings.tgpostai_model,
         )
         created = 0
         for channel in self.config_channels:

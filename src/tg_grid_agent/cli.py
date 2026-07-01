@@ -17,6 +17,7 @@ from .post_improver import TgPostAIImprover
 from .scheduler import build_schedule_slots
 from .settings import get_channel, load_config, load_settings
 from .telegram_client import TelegramGridClient
+from .youtube_source import fetch_youtube_transcript
 
 
 def main() -> None:
@@ -49,6 +50,14 @@ def main() -> None:
     generate_parser.add_argument("--config", default="config.yaml")
     generate_parser.add_argument("--channel", required=True)
     generate_parser.add_argument("--count", type=int, default=10)
+
+    youtube_parser = subparsers.add_parser("generate-from-youtube")
+    youtube_parser.add_argument("--config", default="config.yaml")
+    youtube_parser.add_argument("--channel", required=True)
+    youtube_parser.add_argument("--url")
+    youtube_parser.add_argument("--transcript-file")
+    youtube_parser.add_argument("--title")
+    youtube_parser.add_argument("--count", type=int, default=7)
 
     list_parser = subparsers.add_parser("list-items")
     list_parser.add_argument("--status")
@@ -151,10 +160,37 @@ def main() -> None:
         store.init()
         config = load_config(args.config)
         channel = get_channel(config, args.channel)
-        agent = ContentAgent(settings.openai_api_key, settings.openai_model, settings.openai_image_model)
+        agent = build_content_agent(settings)
         items = agent.generate_posts(config, channel, args.count)
         ids = store.add_many(args.channel, items)
         print(f"Generated {len(ids)} drafts: {','.join(map(str, ids))}")
+        return
+
+    if args.command == "generate-from-youtube":
+        store.init()
+        if not args.url and not args.transcript_file:
+            raise RuntimeError("Pass --url or --transcript-file.")
+
+        config = load_config(args.config)
+        channel = get_channel(config, args.channel)
+        if args.transcript_file:
+            transcript = Path(args.transcript_file).read_text(encoding="utf-8")
+            source_url = args.url
+        else:
+            transcript = fetch_youtube_transcript(args.url)
+            source_url = args.url
+
+        agent = build_content_agent(settings)
+        items = agent.generate_posts_from_source(
+            config=config,
+            channel=channel,
+            transcript=transcript,
+            count=args.count,
+            source_title=args.title,
+            source_url=source_url,
+        )
+        ids = store.add_many(args.channel, items)
+        print(f"Generated {len(ids)} YouTube-based drafts: {','.join(map(str, ids))}")
         return
 
     if args.command == "list-items":
@@ -237,7 +273,7 @@ def main() -> None:
 
     if args.command == "video-ideas":
         config = load_config(args.config)
-        agent = ContentAgent(settings.openai_api_key, settings.openai_model, settings.openai_image_model)
+        agent = build_content_agent(settings)
         ideas = agent.generate_video_ideas(config, args.topic, args.count)
         for index, idea in enumerate(ideas, start=1):
             print(f"\n#{index} {idea.get('platform', 'Video')}: {idea.get('hook', 'Untitled')}")
@@ -258,7 +294,7 @@ def main() -> None:
         item = store.get_items_by_ids([args.id])[0]
         if not item.creative_prompt:
             raise RuntimeError(f"Item {args.id} has no creative_prompt.")
-        agent = ContentAgent(settings.openai_api_key, settings.openai_model, settings.openai_image_model)
+        agent = build_content_agent(settings)
         output_path = agent.render_creative(
             prompt=item.creative_prompt,
             output_path=Path(args.out_dir) / f"creative_{item.id}.png",
@@ -304,6 +340,19 @@ def print_items(items: Iterable[ContentItem], show_creative: bool = False) -> No
 
 def parse_ids(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
+
+
+def build_content_agent(settings) -> ContentAgent:
+    return ContentAgent(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        image_model=settings.openai_image_model,
+        base_url=settings.openai_base_url,
+        ollama_base_url=settings.ollama_base_url,
+        ollama_model=settings.ollama_model,
+        gemini_api_key=settings.gemini_api_key,
+        gemini_model=settings.tgpostai_model,
+    )
 
 
 def resolve_publish_mode(settings) -> str:
