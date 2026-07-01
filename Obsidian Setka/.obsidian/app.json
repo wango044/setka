@@ -1,0 +1,9 @@
+{
+  "cssTheme": "",
+  "enabledCssSnippets": [
+    "setka-style"
+  ],
+  "showViewHeader": true,
+  "readableLineLength": true,
+  "strictLineBreaks": false
+}
