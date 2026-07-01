@@ -7,5 +7,6 @@ __pycache__/
 sessions/
 .pytest_cache/
 *.log
+logs/
 drafts_review.md
 creatives/

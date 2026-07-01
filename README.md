@@ -124,3 +124,31 @@ OPENAI_API_KEY=...
 ```
 
 SQLite база хранится на persistent disk по пути `/data/tg_grid.sqlite3`.
+
+## Бесплатный запуск на Windows
+
+Если не нужен сервер 24/7, самый простой бесплатный вариант — автозапуск на твоем ПК:
+
+```powershell
+.\scripts\start-bot.ps1
+```
+
+Поставить автозапуск при входе в Windows:
+
+```powershell
+.\scripts\install-windows-autostart.ps1
+```
+
+Остановить:
+
+```powershell
+.\scripts\stop-bot.ps1
+```
+
+Убрать автозапуск:
+
+```powershell
+.\scripts\uninstall-windows-autostart.ps1
+```
+
+В этом режиме бот работает без Codex, но только пока компьютер включен и есть интернет.
