@@ -28,4 +28,5 @@ generation:
   approve_before_scheduling: true
   improve_before_approval: true
   include_creative_prompt: true
+  min_post_chars: 420
   max_post_chars: 1200

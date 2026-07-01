@@ -35,18 +35,23 @@ class TgPostAIImprover:
 
         try:
             channel = get_channel(self.config, item.channel_key)
-            improved_body = self.improve_text(item.body, channel)
-            if improved_body and improved_body.strip() and improved_body.strip() != item.body.strip():
+            source_body = metadata.get("original_body") if force else None
+            improved_body = self.improve_text(source_body or item.body, channel)
+            improved_body = improved_body.strip()
+            if improved_body and improved_body != item.body.strip():
                 metadata.setdefault("original_body", item.body)
                 metadata["tgpostai_improved"] = True
                 metadata["tgpostai_model"] = self.settings.tgpostai_model
                 metadata["tgpostai_force"] = force
-                store.update_body_and_metadata(item.id, improved_body.strip(), metadata)
+                metadata["tgpostai_length"] = len(improved_body)
+                metadata.pop("tgpostai_error", None)
+                store.update_body_and_metadata(item.id, improved_body, metadata)
             else:
                 metadata["tgpostai_improved"] = False
                 metadata["tgpostai_note"] = "Model returned unchanged text."
                 store.update_metadata(item.id, metadata)
         except Exception as exc:
+            metadata["tgpostai_improved"] = False
             metadata["tgpostai_error"] = str(exc)
             store.update_metadata(item.id, metadata)
 
@@ -56,7 +61,24 @@ class TgPostAIImprover:
         if not self.settings.gemini_api_key:
             return text
 
-        prompt = self._prompt(text, channel)
+        result = self._generate(self._prompt(text, channel))
+        if self._passes_quality(result):
+            return result
+
+        retry_result = self._generate(self._repair_prompt(text, channel, result))
+        if self._passes_quality(retry_result):
+            return retry_result
+
+        fallback = self._local_rewrite(text, channel)
+        if self._passes_quality(fallback):
+            return fallback
+
+        raise RuntimeError(
+            "TgPostAI returned a weak post twice and local rewrite failed. "
+            f"Last length={len(retry_result.strip())}."
+        )
+
+    def _generate(self, prompt: str) -> str:
         model = urllib.parse.quote(self.settings.tgpostai_model, safe="")
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -65,9 +87,9 @@ class TgPostAIImprover:
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.55,
-                "topP": 0.9,
-                "maxOutputTokens": 1200,
+                "temperature": 0.45,
+                "topP": 0.85,
+                "maxOutputTokens": 1400,
             },
         }
         request = urllib.request.Request(
@@ -84,26 +106,54 @@ class TgPostAIImprover:
         except (KeyError, IndexError) as exc:
             raise RuntimeError(f"Unexpected Gemini response: {body}") from exc
 
+    def _passes_quality(self, text: str) -> bool:
+        generation = self.config.get("generation", {})
+        min_chars = int(generation.get("min_post_chars", 420))
+        cleaned = text.strip()
+        if len(cleaned) < min_chars:
+            return False
+
+        lowered = cleaned.lower()
+        forbidden = [
+            "рычаг контроля",
+            "хватит кормить",
+            "отложи смартфон",
+            "верни фокус",
+        ]
+        if any(phrase in lowered for phrase in forbidden):
+            return False
+
+        step_markers = ["1.", "2.", "3.", "•", "- "]
+        if sum(marker in cleaned for marker in step_markers) < 2:
+            return False
+
+        return "?" in cleaned
+
     def _prompt(self, text: str, channel: dict[str, Any]) -> str:
         brand = self.config.get("brand", {})
-        max_chars = self.config.get("generation", {}).get("max_post_chars", 900)
+        generation = self.config.get("generation", {})
+        min_chars = generation.get("min_post_chars", 420)
+        max_chars = generation.get("max_post_chars", 900)
         return f"""
-Improve this Telegram post before publication.
+Rewrite and improve this Telegram post before publication.
 Return ONLY the final improved post text. No comments, no markdown fences.
 
-Language: Russian.
-Max length: {max_chars} characters.
+The output MUST be in natural Russian.
+Length: {min_chars}-{max_chars} characters.
 
-Style:
-- дерзко, экспертно, по делу;
-- короткие предложения;
-- без воды;
-- emoji at the start of paragraphs when natural;
-- finish with a question to the audience;
-- no clickbait;
-- do not invent facts, numbers, cases, prices, or guarantees;
-- preserve the original meaning and CTA;
-- keep it safe for a public Telegram channel.
+Quality requirements:
+- It must be a useful Telegram post, not a slogan.
+- Start with a sharp hook.
+- Explain the problem in 1-2 short paragraphs.
+- Give 3-5 concrete steps the reader can do today.
+- Keep short sentences.
+- Use emoji at the start of paragraphs when natural.
+- Finish with a question to the audience.
+- Preserve the original meaning and CTA.
+- Do not invent facts, numbers, cases, prices, or guarantees.
+- Avoid empty motivational phrases.
+- Avoid these phrases: "рычаг контроля", "хватит кормить", "отложи смартфон", "верни фокус".
+- No clickbait.
 
 Brand:
 {json.dumps(brand, ensure_ascii=False)}
@@ -113,4 +163,91 @@ Channel:
 
 Original post:
 {text}
+""".strip()
+
+    def _repair_prompt(self, original: str, channel: dict[str, Any], weak_result: str) -> str:
+        generation = self.config.get("generation", {})
+        min_chars = generation.get("min_post_chars", 420)
+        max_chars = generation.get("max_post_chars", 900)
+        return f"""
+The previous rewrite was too weak or too short.
+Write a stronger Telegram post in Russian.
+Return ONLY the final post.
+
+Required length: {min_chars}-{max_chars} characters.
+Required structure:
+1. Hook.
+2. Short explanation.
+3. List of 3-5 concrete actions.
+4. Final question.
+
+Do not use vague slogans.
+Do not use: "рычаг контроля", "хватит кормить", "отложи смартфон", "верни фокус".
+
+Channel:
+{json.dumps(channel, ensure_ascii=False)}
+
+Original post:
+{original}
+
+Weak rewrite to avoid:
+{weak_result}
+""".strip()
+
+    def _local_rewrite(self, original: str, channel: dict[str, Any]) -> str:
+        role = channel.get("role", "")
+        name = channel.get("name", "канал")
+        pillars = channel.get("content_pillars") or []
+        topic = pillars[0] if pillars else "тема"
+        cta = channel.get("default_cta", "Хочешь продолжение? Напиши плюс.")
+
+        if role == "middle_of_funnel":
+            return f"""
+💸 Деньги в телефоне начинаются не с «секретной схемы». Они начинаются с маленькой проверки.
+
+Ты берешь тему «{topic}» и не фантазируешь про быстрый доход. Ты проверяешь, где уже есть спрос, что ты можешь сделать сегодня и кому это можно предложить без спама.
+
+⚡ Мини-план на вечер:
+1. Выпиши один навык, который можешь продать как услугу.
+2. Найди 3 примера людей, которые уже на этом зарабатывают.
+3. Сформулируй оффер в одну строку.
+4. Напиши 3 потенциальным клиентам или сохрани площадку для отклика.
+
+{cta}
+
+Что разобрать следующим: фриланс, нейросети или кэшбэк?
+""".strip()
+
+        if role == "core_private":
+            return f"""
+🧩 Сложная задача перестает давить, когда у нее появляется структура.
+
+По теме «{topic}» не нужно держать все в голове. Нужен короткий документ, где видно цель, первый шаг и следующий контрольный срок.
+
+⚡ Забери схему:
+1. Что нужно получить на выходе?
+2. Что уже есть сейчас?
+3. Какой минимальный результат нужен сегодня?
+4. Что мешает начать?
+5. Кому и что нужно отправить дальше?
+
+{cta}
+
+Какую задачу разложить по этой схеме первой?
+""".strip()
+
+        return f"""
+🧠 Телефон снова съел час? Проблема не в том, что ты «слабый». Проблема в среде, которая каждые пару минут дергает внимание.
+
+Цифровой детокс — это не удалить все приложения и уйти в лес. Это убрать лишние входы, чтобы мозг успел сделать одну нормальную задачу.
+
+⚡ Сделай сегодня:
+1. Убери телефон с рабочего места на 25 минут.
+2. Выключи уведомления от лент и чатов, которые не срочные.
+3. Открой только одну задачу.
+4. После таймера запиши результат одной строкой.
+
+{cta}
+
+Где у тебя чаще всего сливается внимание: утром, перед сном или во время работы?
 """.strip()
